@@ -1,0 +1,92 @@
+version: '3.4'
+services:
+  proxy:
+    image: traefik:v2.6.0
+    # on my notebook traefik serves on default http https ports
+    # this allows natural urls like https://app.dev.local/
+    ports:
+      - 80:80
+      - 443:443
+    # /certs and /conf are dedicated known directories in
+    # official traefik image.
+    # in order to allow traefik to expose docker backend we are
+    # mapping docker socket inside.
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik_certs:/certs
+      - ./traefik_conf:/conf
+    restart: always
+    # if traefik supposed to serve real swarm cluster, peram should be specified
+    #       --docker.swarmmode
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.watch=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.file.directory=/conf/"
+      - "--providers.file.watch=true"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.db.address=:5432"
+      - "--log.level=DEBUG"
+      - "--accessLog"
+      - "--api"
+      - "--metrics"
+      - "--metrics.prometheus"
+      - "--providers.docker.network=traefik-public"
+    networks:
+      default:
+      traefik-public:
+        aliases:
+          - app.dev.local
+    # traefik configuration via labels
+    # expose traefik dashboard under address http://proxy.dev.local
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=Host(`proxy.dev.local`)"
+      - "traefik.http.routers.traefik.entrypoints=web"
+      - "traefik.http.routers.traefik.service=api@internal"
+
+  # docker management UI (Portainer) to be exposed under
+  # https://docker.dev.local
+  portainer:
+    image: portainer/portainer-ce
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    ports:
+      - 9000:9000
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.portainer.rule=Host(`docker.dev.local`)"
+      - "traefik.http.routers.portainer.entrypoints=web"
+      - "traefik.http.services.portainer.loadbalancer.server.port=9000"
+
+  db:
+#    To be able to run on Apple silicon (M1 chips) you gotta manually build:
+#    docker build --build-arg POSTGRES_MAJOR_VERSION=14.0 --build-arg POSTGIS_MAJOR=3.1 -t kartoza/postgis-arm:14-3.1
+    image: kartoza/postgis:13.0
+    volumes:
+      - postgis-data:/var/lib/postgresql
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASS=postgres
+      - ALLOW_IP_RANGE=0.0.0.0/0
+      # Add extensions you need to be enabled by default in the DB. Default are the five specified below
+      - POSTGRES_MULTIPLE_EXTENSIONS=postgis
+    container_name: db
+    networks:
+      - traefik-public
+    ports:
+      - 5432:5432
+    restart: on-failure
+
+volumes:
+  portainer_data:
+  postgis-data:
+
+networks:
+  traefik-public:
+    external: true
