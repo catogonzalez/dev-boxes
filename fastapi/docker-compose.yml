@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  bots_api:
+    build: .
+    command: uvicorn app.main:app --reload --workers 1 --host 0.0.0.0 --port 8000
+    volumes:
+      - .:/usr/src/app:cached
+    ports:
+      - "8004:8000"
+    environment:
+      #      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/foo
+      - DATABASE_URL=postgis://postgres:postgres@host.docker.internal:5432/app_db
+    networks:
+      default:
+      traefik-public:
+        aliases:
+          - bots_api.dev.local
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.bots_api.rule=HostRegexp(`bots_api.dev.local`)"
+      - "traefik.http.routers.app.entrypoints=web"
+
+networks:
+  traefik-public:
+    external: true
