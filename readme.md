@@ -54,3 +54,6 @@ This allows you to run multiple projects (API, Web, Mobile) seamlessly in a unif
 These Docker volumes are created to persist data:
 - Database: `db_data`
 
+### Networks
+
+The proxy (and future containers) will communicate through the `traefik-public` docker network created when you run `./fisrt-run.sh`
